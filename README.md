@@ -7,5 +7,5 @@ Enumeration Tools: (PASSIVE &amp; ACTIVE) Warning: Know your tools and know your
 - https://github.com/aboul3la/Sublist3r
 
 # Wordlist 
-## SecList
- - https://github.com/danielmiessler/SecLists
+## SecLists
+- https://github.com/danielmiessler/SecLists
