@@ -20,7 +20,7 @@ No third-party tooling is required for the validation steps below.
 Query Active Directory for enabled user accounts with registered SPNs:
 
 ```powershell
-Get-ADUser -Filter * -Server "<AD_SERVER>" `
+Get-ADUser -Filter * -Server "10.21.65.229" `
 -Properties ServicePrincipalName,Enabled,PasswordLastSet,PasswordNeverExpires |
 Where-Object {
     $_.Enabled -eq $true -and
@@ -46,7 +46,7 @@ An enabled **user account** with an SPN is a potential Kerberoasting candidate b
 
 ```powershell
 $spn = (
-    Get-ADUser "<SERVICE_ACCOUNT>" `
+    Get-ADUser "10.21.65.229" `
         -Server "<AD_SERVER>" `
         -Properties ServicePrincipalName
 ).ServicePrincipalName | Select-Object -First 1
