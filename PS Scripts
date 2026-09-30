@@ -349,3 +349,169 @@ Write-Host "`n=== COMPLETE ===" -ForegroundColor Cyan
 
 
 ```
+
+
+# Take 3 NXC SMN Enumeration
+
+```
+# ============================================================
+# Native PowerShell SMB Share Enumerator
+# Similar goal to: nxc smb <subnet> --shares
+#
+# - Scans entire /24
+# - Tests TCP/445 first
+# - Resolves hostname
+# - Enumerates shares using CURRENT Windows credentials
+# - Does NOT modify remote systems
+# ============================================================
+
+$Subnet  = "10.21.65"
+$Timeout = 400
+
+$Targets = 1..254 | ForEach-Object {
+    "$Subnet.$_"
+}
+
+$Results = @()
+
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host " SMB SHARE ENUMERATOR"
+Write-Host " Target: $Subnet.0/24"
+Write-Host " User:   $env:USERDOMAIN\$env:USERNAME"
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host ""
+
+foreach ($IP in $Targets) {
+
+    # --------------------------------------------------------
+    # TCP/445 CHECK
+    # --------------------------------------------------------
+
+    $TCP = New-Object System.Net.Sockets.TcpClient
+
+    try {
+
+        $AR = $TCP.BeginConnect(
+            $IP,
+            445,
+            $null,
+            $null
+        )
+
+        if (-not $AR.AsyncWaitHandle.WaitOne($Timeout,$false)) {
+            $TCP.Close()
+            continue
+        }
+
+        $TCP.EndConnect($AR)
+
+        if (-not $TCP.Connected) {
+            $TCP.Close()
+            continue
+        }
+    }
+    catch {
+        try { $TCP.Close() } catch {}
+        continue
+    }
+
+    $TCP.Close()
+
+    Write-Host ""
+    Write-Host "==================================================" -ForegroundColor DarkGray
+    Write-Host "[+] $IP :445 OPEN" -ForegroundColor Green
+
+    # --------------------------------------------------------
+    # DNS LOOKUP
+    # --------------------------------------------------------
+
+    $Hostname = ""
+
+    try {
+
+        $Hostname = (
+            [System.Net.Dns]::GetHostEntry($IP)
+        ).HostName
+
+        Write-Host "[+] Hostname: $Hostname"
+
+    }
+    catch {
+
+        Write-Host "[*] Hostname: unresolved"
+    }
+
+    # --------------------------------------------------------
+    # SHARE ENUMERATION
+    # --------------------------------------------------------
+
+    Write-Host "[*] Enumerating SMB shares..."
+
+    $Output = cmd.exe /c "net view \\$IP 2>&1"
+
+    $ExitCode = $LASTEXITCODE
+
+    if ($ExitCode -eq 0) {
+
+        Write-Host "[+] SHARE ENUM SUCCESS" -ForegroundColor Green
+
+        foreach ($Line in $Output) {
+
+            Write-Host "    $Line"
+
+            # Pull Disk / Print / IPC entries from net view
+            if ($Line -match "^\s*(.+?)\s{2,}(Disk|Print|IPC)\s*(.*)$") {
+
+                $Share   = $Matches[1].Trim()
+                $Type    = $Matches[2].Trim()
+                $Comment = $Matches[3].Trim()
+
+                $Results += [PSCustomObject]@{
+
+                    IP       = $IP
+                    Hostname = $Hostname
+                    Share    = $Share
+                    Type     = $Type
+                    Comment  = $Comment
+                }
+            }
+        }
+    }
+    else {
+
+        Write-Host "[-] SHARE ENUM FAILED (ExitCode $ExitCode)" `
+            -ForegroundColor Yellow
+
+        foreach ($Line in $Output) {
+            Write-Host "    $Line"
+        }
+    }
+}
+
+# ============================================================
+# SUMMARY
+# ============================================================
+
+Write-Host ""
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host " DISCOVERED SMB SHARES"
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host ""
+
+if ($Results.Count -gt 0) {
+
+    $Results |
+        Sort-Object IP,Share |
+        Format-Table IP,Hostname,Share,Type,Comment -AutoSize
+
+}
+else {
+
+    Write-Host "No shares were successfully enumerated."
+}
+
+Write-Host ""
+Write-Host "=== COMPLETE ===" -ForegroundColor Cyan
+```
