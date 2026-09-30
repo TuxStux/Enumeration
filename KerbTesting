@@ -1,0 +1,232 @@
+# Kerberoasting Validation with Native PowerShell
+
+## Objective
+
+Identify user-based Active Directory service accounts with registered Service Principal Names (SPNs) and validate whether a standard domain user can request Kerberos service tickets for those services.
+
+This workflow uses:
+
+- Native PowerShell
+- ActiveDirectory PowerShell module
+- .NET `System.IdentityModel`
+- Windows `klist`
+
+No third-party tooling is required for the validation steps below.
+
+---
+
+## 1. Identify SPN-Bearing Service Accounts
+
+Query Active Directory for enabled user accounts with registered SPNs:
+
+```powershell
+Get-ADUser -Filter * -Server "<AD_SERVER>" `
+-Properties ServicePrincipalName,Enabled,PasswordLastSet,PasswordNeverExpires |
+Where-Object {
+    $_.Enabled -eq $true -and
+    $_.ServicePrincipalName.Count -gt 0
+} |
+Select-Object `
+    SamAccountName,
+    PasswordLastSet,
+    PasswordNeverExpires,
+    @{N="SPNs";E={$_.ServicePrincipalName -join "; "}} |
+Format-List
+```
+
+### Why This Matters
+
+Kerberos services are identified through SPNs.
+
+An enabled **user account** with an SPN is a potential Kerberoasting candidate because authenticated domain users can ordinarily request Kerberos service tickets for registered services.
+
+---
+
+## 2. Select One SPN for the Target Account
+
+```powershell
+$spn = (
+    Get-ADUser "<SERVICE_ACCOUNT>" `
+        -Server "<AD_SERVER>" `
+        -Properties ServicePrincipalName
+).ServicePrincipalName | Select-Object -First 1
+
+$spn
+```
+
+Expected output:
+
+```text
+<SERVICE>/<HOST>
+```
+
+---
+
+## 3. Request a Kerberos Service Ticket
+
+Load the required .NET assembly and request a ticket for the selected SPN:
+
+```powershell
+Add-Type -AssemblyName System.IdentityModel
+
+$t = New-Object `
+    System.IdentityModel.Tokens.KerberosRequestorSecurityToken($spn)
+
+$t | Select-Object ServicePrincipalName,ValidFrom,ValidTo
+```
+
+Successful output confirms that the current Windows session was able to request a TGS for the selected service.
+
+Example:
+
+```text
+ServicePrincipalName : <SERVICE>/<HOST>
+ValidFrom            : <TIME>
+ValidTo              : <TIME>
+```
+
+---
+
+## 4. Verify the Ticket with `klist`
+
+Request/display the ticket through Windows:
+
+```powershell
+klist get $spn
+```
+
+Then inspect the current Kerberos ticket cache:
+
+```powershell
+klist
+```
+
+Look for the target SPN under:
+
+```text
+Server: <SERVICE>/<HOST>
+```
+
+Useful fields include:
+
+```text
+Client
+Server
+KerbTicket Encryption Type
+Ticket Flags
+Start Time
+End Time
+Renew Time
+```
+
+For example:
+
+```text
+Client: standard-user @ DOMAIN
+Server: SERVICE/HOST @ DOMAIN
+
+KerbTicket Encryption Type: AES-256-CTS-HMAC-SHA1-96
+```
+
+---
+
+## What Was Demonstrated
+
+At this point the following has been established:
+
+| Test | Result |
+|---|---|
+| Service account exists | ✅ |
+| Account is enabled | ✅ |
+| Account has registered SPN(s) | ✅ |
+| Standard domain user can request TGS | ✅ |
+| KDC issues service ticket | ✅ |
+| Ticket appears in Kerberos cache | ✅ |
+| Ticket encryption type can be identified | ✅ |
+| Crackable `$krb5tgs$` material extracted | ❌ Not performed |
+| Offline password cracking performed | ❌ Not performed |
+| Service-account password recovered | ❌ Not demonstrated |
+
+---
+
+## Attack Path
+
+Conceptually, Kerberoasting follows this process:
+
+```text
+Standard Domain User
+        │
+        ▼
+Enumerate SPN-Bearing User Accounts
+        │
+        ▼
+Request TGS for Registered SPN
+        │
+        ▼
+Domain Controller / KDC Issues TGS
+        │
+        ▼
+Service Ticket Cached Locally
+        │
+        ▼
+Extract Encrypted Ticket Material
+        │
+        ▼
+Convert to Offline Password-Audit Format
+        │
+        ▼
+Offline Password Guessing
+        │
+        ▼
+Password Recovered?
+```
+
+This exercise validated the workflow through **successful TGS issuance and local ticket caching**.
+
+---
+
+## Security Impact
+
+The existence of an SPN is not itself a vulnerability.
+
+The concern is that user-based service accounts with SPNs can expose Kerberos service-ticket material to authenticated domain users. If the underlying service-account password is weak enough to be recovered through an offline password attack, the attacker may obtain the service account's credentials.
+
+The resulting impact depends on the privileges assigned to that identity.
+
+Examples include:
+
+```text
+Recovered Service Account
+        │
+        ├── Application access
+        │
+        ├── Database access
+        │
+        ├── Administrative access to servers
+        │
+        ├── AD permissions
+        │
+        └── Kerberos delegation rights
+```
+
+Service accounts configured with delegation or elevated permissions therefore warrant additional scrutiny.
+
+---
+
+## Key Takeaway
+
+Finding an SPN does **not** mean the service-account password has been compromised.
+
+The important distinction is:
+
+```text
+SPN discovered
+      ↓
+TGS successfully requested
+      ↓
+Kerberoast prerequisite confirmed
+      ↓
+Password strength still unknown
+```
+
+A successful TGS request demonstrates that the account can participate in the Kerberoasting attack path, while actual password recovery depends on the account's password strength and requires a separate offline password audit.
