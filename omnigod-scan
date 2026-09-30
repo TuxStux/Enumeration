@@ -1,0 +1,34 @@
+$subnet="10.21.65"
+
+1..254 | ForEach-Object {
+    $ip="$subnet.$_"
+    $c=New-Object Net.Sockets.TcpClient
+
+    try {
+        $a=$c.BeginConnect($ip,5985,$null,$null)
+
+        if($a.AsyncWaitHandle.WaitOne(300,$false) -and $c.Connected) {
+            $c.Close()
+
+            try {
+                $r=Invoke-WebRequest -Uri "http://$ip`:5985/wsman" -UseBasicParsing -TimeoutSec 3
+                "$ip`t5985 OPEN`tHTTP $($r.StatusCode)`tServer: $($r.Headers['Server'])"
+            }
+            catch {
+                if($_.Exception.Response) {
+                    $resp=$_.Exception.Response
+                    "$ip`t5985 OPEN`tHTTP $([int]$resp.StatusCode)`tServer: $($resp.Headers['Server'])"
+                }
+                else {
+                    "$ip`t5985 OPEN`tWSMAN: $($_.Exception.Message)"
+                }
+            }
+        }
+        else {
+            $c.Close()
+        }
+    }
+    catch {
+        $c.Close()
+    }
+}
