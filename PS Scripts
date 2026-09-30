@@ -515,3 +515,38 @@ else {
 Write-Host ""
 Write-Host "=== COMPLETE ===" -ForegroundColor Cyan
 ```
+
+# SVC Account Enum
+
+
+```
+$DC = "<AD_QUERY_SERVER>"
+
+Get-ADUser -Filter * -Server $DC `
+-Properties ServicePrincipalName,Description,Enabled,MemberOf,PasswordLastSet,PasswordNeverExpires,LastLogonDate |
+Where-Object { $_.ServicePrincipalName.Count -gt 0 } |
+Select-Object `
+    SamAccountName,
+    Enabled,
+    PasswordLastSet,
+    PasswordNeverExpires,
+    LastLogonDate,
+    Description,
+    @{N="SPNs";E={$_.ServicePrincipalName -join "; "}},
+    @{N="Groups";E={$_.MemberOf -join "; "}} |
+Format-List
+
+```
+
+```
+$DC = "<AD_QUERY_SERVER>"
+
+Get-ADUser -Filter * -Server $DC `
+-Properties Description,Enabled,PasswordLastSet,PasswordNeverExpires,LastLogonDate |
+Where-Object {
+    $_.SamAccountName -match 'svc|service|sql|backup|batch|app|deploy|admin|automation'
+} |
+Select SamAccountName,Enabled,PasswordLastSet,PasswordNeverExpires,LastLogonDate,Description |
+Sort SamAccountName |
+Format-Table -Wrap -AutoSize
+```
