@@ -170,3 +170,46 @@ $Results |
     Sort-Object IP |
     Format-Table IP,Hostname,CurrentCredIPC,SMB1,SMB2,SigningRequired -AutoSize
 ```
+
+
+# NXC SMB Part II
+
+
+```
+$h="<TARGET_IP>"
+
+Write-Host "=== SMB TEST: $h ==="
+
+# TCP
+if(Test-NetConnection $h -Port 445 -InformationLevel Quiet -WarningAction SilentlyContinue){
+    Write-Host "[+] TCP/445 OPEN"
+}else{
+    Write-Host "[-] TCP/445 CLOSED"
+    return
+}
+
+# DNS
+try {
+    $n=[System.Net.Dns]::GetHostEntry($h).HostName
+    Write-Host "[+] Hostname: $n"
+}catch{
+    Write-Host "[-] DNS lookup failed"
+}
+
+# Try current Windows credentials against IPC$
+Write-Host "`n=== CURRENT CREDENTIAL SMB SESSION ==="
+
+cmd /c "net use \\$h\IPC$ /persistent:no"
+
+# Enumerate shares using current credentials
+Write-Host "`n=== SHARES ==="
+
+cmd /c "net view \\$h"
+
+# Existing SMB client sessions
+Write-Host "`n=== SMB CONNECTIONS ==="
+
+Get-SmbConnection -ErrorAction SilentlyContinue |
+Where-Object {$_.ServerName -eq $h -or $_.ServerName -eq $n} |
+Format-Table ServerName,ShareName,UserName,Dialect,NumOpens -AutoSize
+```
