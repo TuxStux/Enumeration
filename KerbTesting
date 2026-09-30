@@ -46,8 +46,8 @@ An enabled **user account** with an SPN is a potential Kerberoasting candidate b
 
 ```powershell
 $spn = (
-    Get-ADUser "10.21.65.229" `
-        -Server "<AD_SERVER>" `
+    Get-ADUser "svc-usri-piaf" `
+        -Server "10.21.65.229" `
         -Properties ServicePrincipalName
 ).ServicePrincipalName | Select-Object -First 1
 
