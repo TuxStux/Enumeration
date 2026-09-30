@@ -599,3 +599,89 @@ ForEach-Object {
     }
 } | Sort-Object User,Group | Format-Table -Wrap -AutoSize
 ```
+
+
+```
+$DC = "10.21.65.229"
+
+# Put ONLY the two service-account SAM names here.
+$Accounts = @(
+    "<SERVICE_ACCOUNT_1>",
+    "<SERVICE_ACCOUNT_2>"
+)
+
+Write-Host "`n=== SPN / KERBEROS SERVICE ACCOUNT TRIAGE ===" -ForegroundColor Cyan
+Write-Host "AD query server: $DC`n"
+
+foreach ($Name in $Accounts) {
+
+    Write-Host "==================================================" -ForegroundColor DarkGray
+    Write-Host "[*] $Name" -ForegroundColor Cyan
+
+    try {
+        $U = Get-ADUser $Name -Server $DC `
+            -Properties Enabled,ServicePrincipalName,PasswordLastSet,
+                        PasswordNeverExpires,MemberOf,Description,
+                        TrustedForDelegation,TrustedToAuthForDelegation,
+                        msDS-AllowedToDelegateTo `
+            -ErrorAction Stop
+
+        $SPNs = @($U.ServicePrincipalName)
+        $Groups = @(
+            $U.MemberOf | ForEach-Object {
+                ($_ -split ',')[0] -replace '^CN=',''
+            }
+        )
+
+        Write-Host "Enabled               : $($U.Enabled)"
+        Write-Host "PasswordLastSet       : $($U.PasswordLastSet)"
+        Write-Host "PasswordNeverExpires  : $($U.PasswordNeverExpires)"
+        Write-Host "SPN Count             : $($SPNs.Count)"
+
+        if ($SPNs.Count -gt 0) {
+            Write-Host "`nSPNs:" -ForegroundColor Yellow
+            $SPNs | ForEach-Object {
+                Write-Host "  $_"
+            }
+        }
+
+        if ($Groups.Count -gt 0) {
+            Write-Host "`nDirect Groups:"
+            $Groups | ForEach-Object {
+                Write-Host "  $_"
+            }
+        }
+        else {
+            Write-Host "`nDirect Groups         : None returned"
+        }
+
+        Write-Host "`nDelegation:"
+        Write-Host "  TrustedForDelegation       : $($U.TrustedForDelegation)"
+        Write-Host "  TrustedToAuthForDelegation : $($U.TrustedToAuthForDelegation)"
+
+        if ($U.'msDS-AllowedToDelegateTo') {
+            Write-Host "  AllowedToDelegateTo:"
+            $U.'msDS-AllowedToDelegateTo' |
+                ForEach-Object { Write-Host "    $_" }
+        }
+
+        Write-Host "`nRESULT:" -ForegroundColor Cyan
+
+        if ($U.Enabled -and $SPNs.Count -gt 0) {
+            Write-Host "  [YES] Basic Kerberoast candidate" -ForegroundColor Yellow
+            Write-Host "        Enabled USER account + registered SPN(s)."
+        }
+        elseif (-not $U.Enabled) {
+            Write-Host "  [NO] Account disabled." -ForegroundColor Green
+        }
+        else {
+            Write-Host "  [NO] No SPN registered to this user." -ForegroundColor Green
+        }
+
+        Write-Host ""
+    }
+    catch {
+        Write-Host "[-] Query failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+```
