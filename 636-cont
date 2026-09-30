@@ -1,0 +1,43 @@
+$h="10.21.65.142"
+
+Add-Type -AssemblyName System.DirectoryServices.Protocols
+
+$id=New-Object System.DirectoryServices.Protocols.LdapDirectoryIdentifier($h,636)
+$c=New-Object System.DirectoryServices.Protocols.LdapConnection($id)
+
+$c.SessionOptions.SecureSocketLayer=$true
+$c.SessionOptions.VerifyServerCertificate={param($conn,$cert) $true}
+$c.AuthType=[System.DirectoryServices.Protocols.AuthType]::Anonymous
+$c.Timeout=New-TimeSpan -Seconds 5
+
+try {
+    $c.Bind()
+    "[+] Anonymous LDAP bind: SUCCESS"
+
+    $req=New-Object System.DirectoryServices.Protocols.SearchRequest(
+        "",
+        "(objectClass=*)",
+        [System.DirectoryServices.Protocols.SearchScope]::Base,
+        @("objectClass","namingContexts","defaultNamingContext","dnsHostName","vendorName","vendorVersion","supportedLDAPVersion","supportedSASLMechanisms")
+    )
+
+    $res=$c.SendRequest($req)
+
+    "[+] LDAP result code: $($res.ResultCode)"
+    "[+] Entries returned: $($res.Entries.Count)"
+
+    foreach($e in $res.Entries) {
+        "DN: $($e.DistinguishedName)"
+
+        foreach($a in $e.Attributes.AttributeNames) {
+            $v=$e.Attributes[$a].GetValues([string]) -join ", "
+            "  $a = $v"
+        }
+    }
+}
+catch {
+    "[-] $($_.Exception.Message)"
+}
+finally {
+    $c.Dispose()
+}
