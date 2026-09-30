@@ -902,3 +902,93 @@ klist
 Write-Host ""
 Write-Host "=== COMPLETE ===" -ForegroundColor Cyan
 ```
+
+
+```
+# ============================================================
+# Kerberos Service Account / TGS Lab Harness
+# Native PowerShell
+# ============================================================
+
+$DC = "10.21.65.229"
+
+$Accounts = @(
+    "svc-usri-piaf",
+    "svc-usri-pi-cs"
+)
+
+Add-Type -AssemblyName System.IdentityModel
+
+foreach ($Account in $Accounts) {
+
+    Write-Host "`n==================================================" -ForegroundColor Cyan
+    Write-Host "ACCOUNT: $Account" -ForegroundColor Cyan
+
+    try {
+        # Query account and obtain its registered SPNs.
+        $User = Get-ADUser $Account -Server $DC `
+            -Properties Enabled,ServicePrincipalName `
+            -ErrorAction Stop
+
+        if (-not $User.Enabled) {
+            Write-Host "[-] Account disabled."
+            continue
+        }
+
+        $SPNs = @($User.ServicePrincipalName)
+
+        if ($SPNs.Count -eq 0) {
+            Write-Host "[-] No SPNs."
+            continue
+        }
+
+        foreach ($SPN in $SPNs) {
+
+            Write-Host "`n[*] SPN: $SPN"
+
+            try {
+                # Request the TGS through the normal Windows
+                # Kerberos APIs using the current logon session.
+                $Ticket = New-Object `
+                    System.IdentityModel.Tokens.KerberosRequestorSecurityToken `
+                    -ArgumentList $SPN
+
+                Write-Host "[+] TGS issued" -ForegroundColor Green
+                Write-Host "    Service : $($Ticket.ServicePrincipalName)"
+                Write-Host "    ValidTo : $($Ticket.ValidTo)"
+
+                # --------------------------------------------------
+                # INTENTIONALLY NOT IMPLEMENTED
+                #
+                # The next stage of a Kerberoasting implementation
+                # would process the returned Kerberos ticket and
+                # extract/reformat its cryptographic ticket material
+                # into an offline password-verification representation
+                # such as:
+                #
+                #     $krb5tgs$...
+                #
+                # That credential-extraction/reformatting implementation
+                # is intentionally omitted.
+                # --------------------------------------------------
+
+            }
+            catch {
+                Write-Host "[-] TGS request failed: $($_.Exception.Message)" `
+                    -ForegroundColor Red
+            }
+        }
+    }
+    catch {
+        Write-Host "[-] AD query failed: $($_.Exception.Message)" `
+            -ForegroundColor Red
+    }
+}
+
+Write-Host "`n==================================================" -ForegroundColor Cyan
+Write-Host "KERBEROS CACHE" -ForegroundColor Cyan
+Write-Host "=================================================="
+
+klist
+```
+
