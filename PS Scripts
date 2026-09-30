@@ -176,40 +176,176 @@ $Results |
 
 
 ```
-$h="<TARGET_IP>"
+# Native PowerShell equivalent-ish to:
+# nxc smb <targets> --shares
+#
+# Uses CURRENT Windows credentials.
+# Read-only share enumeration.
 
-Write-Host "=== SMB TEST: $h ==="
+$Targets = @(
+"10.21.65.6",
+"10.21.65.7",
+"10.21.65.16",
+"10.21.65.17",
+"10.21.65.21",
+"10.21.65.22",
+"10.21.65.24",
+"10.21.65.25",
+"10.21.65.26",
+"10.21.65.27",
+"10.21.65.30",
+"10.21.65.31",
+"10.21.65.32",
+"10.21.65.33",
+"10.21.65.34",
+"10.21.65.35",
+"10.21.65.36",
+"10.21.65.37",
+"10.21.65.38",
+"10.21.65.41",
+"10.21.65.42",
+"10.21.65.43",
+"10.21.65.44",
+"10.21.65.45",
+"10.21.65.47",
+"10.21.65.49",
+"10.21.65.50",
+"10.21.65.52",
+"10.21.65.53",
+"10.21.65.60",
+"10.21.65.61",
+"10.21.65.62",
+"10.21.65.63",
+"10.21.65.64",
+"10.21.65.65",
+"10.21.65.66",
+"10.21.65.69",
+"10.21.65.70",
+"10.21.65.73",
+"10.21.65.74",
+"10.21.65.75",
+"10.21.65.76",
+"10.21.65.77",
+"10.21.65.78",
+"10.21.65.79",
+"10.21.65.80",
+"10.21.65.83",
+"10.21.65.88",
+"10.21.65.91",
+"10.21.65.93",
+"10.21.65.94",
+"10.21.65.95",
+"10.21.65.97",
+"10.21.65.98",
+"10.21.65.100",
+"10.21.65.102",
+"10.21.65.103",
+"10.21.65.104",
+"10.21.65.107",
+"10.21.65.108",
+"10.21.65.109",
+"10.21.65.110",
+"10.21.65.112",
+"10.21.65.113",
+"10.21.65.114",
+"10.21.65.118",
+"10.21.65.119",
+"10.21.65.120",
+"10.21.65.122",
+"10.21.65.123",
+"10.21.65.124",
+"10.21.65.125",
+"10.21.65.126",
+"10.21.65.127",
+"10.21.65.128",
+"10.21.65.130",
+"10.21.65.131",
+"10.21.65.132",
+"10.21.65.133",
+"10.21.65.134",
+"10.21.65.135",
+"10.21.65.136",
+"10.21.65.137",
+"10.21.65.138",
+"10.21.65.139",
+"10.21.65.140",
+"10.21.65.141",
+"10.21.65.143",
+"10.21.65.144",
+"10.21.65.145"
+)
 
-# TCP
-if(Test-NetConnection $h -Port 445 -InformationLevel Quiet -WarningAction SilentlyContinue){
-    Write-Host "[+] TCP/445 OPEN"
-}else{
-    Write-Host "[-] TCP/445 CLOSED"
-    return
+Write-Host "`n=== SMB SHARE ENUMERATION ===" -ForegroundColor Cyan
+Write-Host "Using current Windows credentials: $env:USERDOMAIN\$env:USERNAME`n"
+
+foreach ($IP in $Targets) {
+
+    Write-Host "`n==================================================" -ForegroundColor DarkGray
+    Write-Host "[*] $IP" -ForegroundColor Cyan
+
+    # Verify 445 before waiting on SMB commands
+    $tcp = New-Object Net.Sockets.TcpClient
+
+    try {
+        $ar = $tcp.BeginConnect($IP,445,$null,$null)
+
+        if(-not $ar.AsyncWaitHandle.WaitOne(500,$false)) {
+            Write-Host "[-] 445 timeout"
+            $tcp.Close()
+            continue
+        }
+
+        $tcp.EndConnect($ar)
+
+        if(-not $tcp.Connected) {
+            Write-Host "[-] 445 closed"
+            $tcp.Close()
+            continue
+        }
+
+        Write-Host "[+] 445 OPEN" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "[-] 445 connection failed"
+        try {$tcp.Close()} catch {}
+        continue
+    }
+
+    $tcp.Close()
+
+    # Resolve hostname
+    try {
+        $hostname = [Net.Dns]::GetHostEntry($IP).HostName
+        Write-Host "[+] Host: $hostname"
+    }
+    catch {
+        $hostname = ""
+    }
+
+    # Enumerate shares using current credentials
+    Write-Host "[*] Enumerating shares..."
+
+    $output = cmd.exe /c "net view \\$IP 2>&1"
+
+    if($LASTEXITCODE -eq 0) {
+
+        Write-Host "[+] SHARE ENUM SUCCESS" -ForegroundColor Green
+
+        $output | ForEach-Object {
+            Write-Host "    $_"
+        }
+    }
+    else {
+
+        Write-Host "[-] Share enumeration failed" -ForegroundColor Yellow
+
+        $output | ForEach-Object {
+            Write-Host "    $_"
+        }
+    }
 }
 
-# DNS
-try {
-    $n=[System.Net.Dns]::GetHostEntry($h).HostName
-    Write-Host "[+] Hostname: $n"
-}catch{
-    Write-Host "[-] DNS lookup failed"
-}
+Write-Host "`n=== COMPLETE ===" -ForegroundColor Cyan
 
-# Try current Windows credentials against IPC$
-Write-Host "`n=== CURRENT CREDENTIAL SMB SESSION ==="
 
-cmd /c "net use \\$h\IPC$ /persistent:no"
-
-# Enumerate shares using current credentials
-Write-Host "`n=== SHARES ==="
-
-cmd /c "net view \\$h"
-
-# Existing SMB client sessions
-Write-Host "`n=== SMB CONNECTIONS ==="
-
-Get-SmbConnection -ErrorAction SilentlyContinue |
-Where-Object {$_.ServerName -eq $h -or $_.ServerName -eq $n} |
-Format-Table ServerName,ShareName,UserName,Dialect,NumOpens -AutoSize
 ```
