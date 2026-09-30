@@ -715,3 +715,190 @@ foreach ($Name in $Accounts) {
 
 Write-Host "=== COMPLETE ===" -ForegroundColor Cyan
 ```
+# REquesting Kerb Ticket
+
+```
+# ============================================================
+# Native Kerberos TGS Validation
+# No external tooling
+# No passwords
+# No confidential hostnames/SPNs hardcoded
+# ============================================================
+
+$DC = "10.21.65.229"
+
+$Accounts = @(
+    "svc-usri-piaf",
+    "svc-usri-pi-cs"
+)
+
+Add-Type -AssemblyName System.IdentityModel
+
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host " KERBEROS SERVICE-TICKET VALIDATION"
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host ""
+
+foreach ($Account in $Accounts) {
+
+    Write-Host "==================================================" -ForegroundColor DarkGray
+    Write-Host "[*] Account: $Account" -ForegroundColor Cyan
+
+    try {
+
+        # ----------------------------------------------------
+        # QUERY ACCOUNT FROM AD
+        # ----------------------------------------------------
+
+        $User = Get-ADUser $Account `
+            -Server $DC `
+            -Properties Enabled,
+                        ServicePrincipalName,
+                        PasswordLastSet,
+                        PasswordNeverExpires,
+                        TrustedForDelegation,
+                        TrustedToAuthForDelegation,
+                        msDS-AllowedToDelegateTo `
+            -ErrorAction Stop
+
+        $SPNs = @($User.ServicePrincipalName)
+
+        Write-Host ""
+        Write-Host "Enabled              : $($User.Enabled)"
+        Write-Host "PasswordLastSet      : $($User.PasswordLastSet)"
+        Write-Host "PasswordNeverExpires : $($User.PasswordNeverExpires)"
+        Write-Host "SPN Count            : $($SPNs.Count)"
+        Write-Host "TrustedForDelegation : $($User.TrustedForDelegation)"
+        Write-Host "ProtocolTransition   : $($User.TrustedToAuthForDelegation)"
+
+        # ----------------------------------------------------
+        # VALIDATE ACCOUNT
+        # ----------------------------------------------------
+
+        if (-not $User.Enabled) {
+
+            Write-Host ""
+            Write-Host "[-] Account is disabled." -ForegroundColor Red
+            continue
+        }
+
+        if ($SPNs.Count -eq 0) {
+
+            Write-Host ""
+            Write-Host "[-] Account has no SPNs." -ForegroundColor Red
+            continue
+        }
+
+        # ----------------------------------------------------
+        # DISPLAY SPNs
+        # ----------------------------------------------------
+
+        Write-Host ""
+        Write-Host "Registered SPNs:" -ForegroundColor Yellow
+
+        foreach ($SPN in $SPNs) {
+            Write-Host "  $SPN"
+        }
+
+        # ----------------------------------------------------
+        # SELECT ONE SPN AUTOMATICALLY
+        # ----------------------------------------------------
+
+        $SelectedSPN = $SPNs | Select-Object -First 1
+
+        Write-Host ""
+        Write-Host "[*] Selected SPN:" -ForegroundColor Cyan
+        Write-Host "    $SelectedSPN"
+
+        # ----------------------------------------------------
+        # REQUEST NORMAL KERBEROS SERVICE TICKET
+        # ----------------------------------------------------
+
+        Write-Host ""
+        Write-Host "[*] Requesting Kerberos service ticket..."
+
+        try {
+
+            $Token = New-Object `
+                System.IdentityModel.Tokens.KerberosRequestorSecurityToken `
+                -ArgumentList $SelectedSPN
+
+            Write-Host "[+] TGS REQUEST SUCCESSFUL" -ForegroundColor Green
+
+            Write-Host ""
+            Write-Host "Ticket information:"
+            Write-Host "  Service : $($Token.ServicePrincipalName)"
+            Write-Host "  ValidTo : $($Token.ValidTo)"
+
+        }
+        catch {
+
+            Write-Host "[-] TGS REQUEST FAILED" -ForegroundColor Red
+            Write-Host "    $($_.Exception.Message)"
+            continue
+        }
+
+        # ----------------------------------------------------
+        # DELEGATION TARGETS
+        # ----------------------------------------------------
+
+        Write-Host ""
+        Write-Host "Delegation configuration:" -ForegroundColor Cyan
+
+        if ($User.'msDS-AllowedToDelegateTo') {
+
+            foreach ($Target in $User.'msDS-AllowedToDelegateTo') {
+                Write-Host "  $Target"
+            }
+
+        }
+        else {
+
+            Write-Host "  None"
+        }
+
+        # ----------------------------------------------------
+        # RESULT
+        # ----------------------------------------------------
+
+        Write-Host ""
+        Write-Host "RESULT:" -ForegroundColor Cyan
+
+        Write-Host "  [+] Enabled user account"
+        Write-Host "  [+] Registered SPN"
+        Write-Host "  [+] Standard domain session obtained TGS" `
+            -ForegroundColor Green
+
+        if ($User.TrustedToAuthForDelegation) {
+
+            Write-Host "  [+] Protocol-transition delegation configured" `
+                -ForegroundColor Yellow
+        }
+
+        Write-Host ""
+    }
+
+    catch {
+
+        Write-Host ""
+        Write-Host "[-] AD QUERY FAILED" -ForegroundColor Red
+        Write-Host "    $($_.Exception.Message)"
+    }
+}
+
+# ============================================================
+# SHOW CURRENT KERBEROS CACHE
+# ============================================================
+
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host " CURRENT KERBEROS TICKET CACHE"
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host ""
+
+klist
+
+Write-Host ""
+Write-Host "=== COMPLETE ===" -ForegroundColor Cyan
+```
