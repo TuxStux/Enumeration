@@ -550,3 +550,52 @@ Select SamAccountName,Enabled,PasswordLastSet,PasswordNeverExpires,LastLogonDate
 Sort SamAccountName |
 Format-Table -Wrap -AutoSize
 ```
+```
+$DC = "<AD_QUERY_SERVER>"
+
+Get-ADUser -Filter * -Server $DC `
+-Properties ServicePrincipalName,Description,Enabled,PasswordLastSet,PasswordNeverExpires,LastLogonDate,MemberOf |
+Where-Object {
+    $_.Enabled -eq $true -and
+    $_.ServicePrincipalName.Count -gt 0
+} |
+Select-Object `
+    SamAccountName,
+    PasswordLastSet,
+    PasswordNeverExpires,
+    LastLogonDate,
+    Description,
+    @{N="SPNs";E={$_.ServicePrincipalName -join "; "}},
+    @{N="Groups";E={
+        ($_.MemberOf | ForEach-Object {
+            ($_ -split ',')[0] -replace '^CN=',''
+        }) -join "; "
+    }} |
+Sort-Object PasswordLastSet |
+Format-List
+```
+```
+$DC = "<AD_QUERY_SERVER>"
+
+Get-ADUser -Filter * -Server $DC `
+-Properties ServicePrincipalName,MemberOf,Enabled,Description |
+Where-Object {
+    $_.Enabled -and
+    $_.ServicePrincipalName.Count -gt 0 -and
+    $_.MemberOf.Count -gt 0
+} |
+ForEach-Object {
+
+    $u = $_
+
+    foreach($g in $u.MemberOf) {
+
+        [PSCustomObject]@{
+            User        = $u.SamAccountName
+            Group       = (($g -split ',')[0] -replace '^CN=','')
+            SPN         = $u.ServicePrincipalName -join "; "
+            Description = $u.Description
+        }
+    }
+} | Sort-Object User,Group | Format-Table -Wrap -AutoSize
+```
