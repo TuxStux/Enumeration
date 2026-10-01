@@ -10,7 +10,9 @@ $Roots=@("C:\","D:\");$Pattern='(?i)(password|passwd|pwd|credential|secret|token
 $root="D:\Software Installs";Get-ChildItem $root -Recurse -Force -File -ErrorAction SilentlyContinue | Where-Object {$_.Extension -match '^\.(ini|bat|cmd|config|xml|txt|bak)$'} | Select-String -Pattern '(?i)pass(word|wd)?|pwd|user(name)?|credential|secret|token|api.?key|auth|connection.?string|account|service.?account|uid\s*=|user\s*=|login\s*=' -ErrorAction SilentlyContinue | Select Path,LineNumber,Line | Format-Table -Wrap -AutoSize
 ```
 
-
+```
+$root="D:\Software Installs";$rx='(?i)(password|passwd|pwd|secret|api[_-]?key|access[_-]?key|client[_-]?secret|token)\s*[:=]|(user(name)?|uid|login)\s*[:=].{1,80}(pass(word|wd)?|pwd)|connectionstring\s*[:=]|(Data Source|Server)\s*=.+;(User ID|UID)\s*=.+;(Password|PWD)\s*=';Get-ChildItem $root -Recurse -Force -File -Include *.ini,*.bat,*.cmd,*.config,*.xml,*.json,*.txt,*.bak,*.env -ErrorAction SilentlyContinue | Select-String -Pattern $rx -ErrorAction SilentlyContinue | Select Path,LineNumber,Line | Format-Table -Wrap -AutoSize
+```
 
 
 
