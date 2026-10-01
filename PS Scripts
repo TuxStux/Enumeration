@@ -1,3 +1,20 @@
+```
+$Roots=@("C:\","D:\");$NameRx='(?i)(pass(word|wd)?|cred(ential)?|secret|token|auth|api.?key|private.?key|connection|string|login|account|vault|backup|config|settings|unattend|web\.config|app\.config|\.env|\.kdbx|\.pfx|\.pem|id_rsa)';$ExtRx='(?i)\.(txt|ini|conf|config|xml|json|yaml|yml|properties|env|log|csv|ps1|bat|cmd|vbs|sql|bak|old|backup|kdbx|pfx|p12|pem|key)$';foreach($Root in $Roots){if(Test-Path $Root){Write-Host "`n=== SEARCHING $Root ===" -ForegroundColor Cyan;Get-ChildItem $Root -Recurse -Force -File -ErrorAction SilentlyContinue | Where-Object {$_.Name -match $NameRx -or $_.Name -match $ExtRx} | Select-Object FullName,Length,LastWriteTime | Sort-Object FullName | Format-Table -AutoSize}}
+```
+
+```
+$Roots=@("C:\","D:\");$Pattern='(?i)(password|passwd|pwd|credential|secret|token|api.?key|auth(orization)?|connectionstring|user(name)?|login|private.?key)';$Ext='*.txt','*.ini','*.conf','*.config','*.xml','*.json','*.yaml','*.yml','*.properties','*.env','*.ps1','*.bat','*.cmd','*.vbs','*.sql';foreach($Root in $Roots){if(Test-Path $Root){Write-Host "`n=== CONTENT SEARCH $Root ===" -ForegroundColor Cyan;Get-ChildItem $Root -Recurse -Force -File -Include $Ext -ErrorAction SilentlyContinue | Select-String -Pattern $Pattern -ErrorAction SilentlyContinue | Select-Object Path,LineNumber,Line | Format-Table -Wrap -AutoSize}}
+```
+
+
+
+
+
+
+
+
+
+
 # ADModule Queries for AD Enumeration
 
 
