@@ -1,0 +1,4 @@
+# sql testing
+```
+$h="10.21.65.49";$c=New-Object System.Data.SqlClient.SqlConnection("Server=$h,1433;Database=master;Integrated Security=True;Connect Timeout=5");try{$c.Open();Write-Host "[+] SQL CONNECTION SUCCESS: $h" -ForegroundColor Green;$q=$c.CreateCommand();$q.CommandText="SELECT SYSTEM_USER AS LoginName, USER_NAME() AS DatabaseUser, @@VERSION AS Version";$r=$q.ExecuteReader();while($r.Read()){Write-Host "Login: $($r['LoginName'])";Write-Host "Database User: $($r['DatabaseUser'])";Write-Host "Version: $($r['Version'])"};$r.Close()}catch{Write-Host "[-] SQL CONNECTION FAILED: $h" -ForegroundColor Red;Write-Host $_.Exception.Message}finally{$c.Close()}
+`
