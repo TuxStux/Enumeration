@@ -6,7 +6,9 @@ $Roots=@("C:\","D:\");$NameRx='(?i)(pass(word|wd)?|cred(ential)?|secret|token|au
 $Roots=@("C:\","D:\");$Pattern='(?i)(password|passwd|pwd|credential|secret|token|api.?key|auth(orization)?|connectionstring|user(name)?|login|private.?key)';$Ext='*.txt','*.ini','*.conf','*.config','*.xml','*.json','*.yaml','*.yml','*.properties','*.env','*.ps1','*.bat','*.cmd','*.vbs','*.sql';foreach($Root in $Roots){if(Test-Path $Root){Write-Host "`n=== CONTENT SEARCH $Root ===" -ForegroundColor Cyan;Get-ChildItem $Root -Recurse -Force -File -Include $Ext -ErrorAction SilentlyContinue | Select-String -Pattern $Pattern -ErrorAction SilentlyContinue | Select-Object Path,LineNumber,Line | Format-Table -Wrap -AutoSize}}
 ```
 
-
+```
+$root="D:\Software Installs";Get-ChildItem $root -Recurse -Force -File -ErrorAction SilentlyContinue | Where-Object {$_.Extension -match '^\.(ini|bat|cmd|config|xml|txt|bak)$'} | Select-String -Pattern '(?i)pass(word|wd)?|pwd|user(name)?|credential|secret|token|api.?key|auth|connection.?string|account|service.?account|uid\s*=|user\s*=|login\s*=' -ErrorAction SilentlyContinue | Select Path,LineNumber,Line | Format-Table -Wrap -AutoSize
+```
 
 
 
