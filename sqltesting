@@ -2,3 +2,123 @@
 ```
 $h="10.21.65.49";$c=New-Object System.Data.SqlClient.SqlConnection("Server=$h,1433;Database=master;Integrated Security=True;Connect Timeout=5");try{$c.Open();Write-Host "[+] SQL CONNECTION SUCCESS: $h" -ForegroundColor Green;$q=$c.CreateCommand();$q.CommandText="SELECT SYSTEM_USER AS LoginName, USER_NAME() AS DatabaseUser, @@VERSION AS Version";$r=$q.ExecuteReader();while($r.Read()){Write-Host "Login: $($r['LoginName'])";Write-Host "Database User: $($r['DatabaseUser'])";Write-Host "Version: $($r['Version'])"};$r.Close()}catch{Write-Host "[-] SQL CONNECTION FAILED: $h" -ForegroundColor Red;Write-Host $_.Exception.Message}finally{$c.Close()}
 `
+
+```
+$Targets = @(
+    "10.21.65.49",
+    "10.21.65.60",
+    "10.21.65.61",
+    "10.21.65.62",
+    "10.21.65.108"
+)
+
+$Results = @()
+
+Write-Host "`n=== MSSQL AUTHENTICATION CHECK ===" -ForegroundColor Cyan
+Write-Host "Integrated identity: $env:USERDOMAIN\$env:USERNAME"
+Write-Host ""
+
+foreach($h in $Targets){
+
+    Write-Host "==========================================" -ForegroundColor DarkGray
+    Write-Host "[*] $h`:1433" -ForegroundColor Cyan
+
+    # ---------------------------------------------------------
+    # TEST 1 - CURRENT WINDOWS IDENTITY
+    # ---------------------------------------------------------
+
+    $Integrated = "FAILED"
+    $Login = ""
+    $Version = ""
+
+    $cs = "Server=$h,1433;Database=master;Integrated Security=True;Connect Timeout=5"
+    $c = New-Object System.Data.SqlClient.SqlConnection($cs)
+
+    try {
+
+        $c.Open()
+
+        $Integrated = "SUCCESS"
+
+        Write-Host "[+] WINDOWS AUTH SUCCESS" -ForegroundColor Green
+
+        $q = $c.CreateCommand()
+        $q.CommandText = "SELECT SYSTEM_USER, @@VERSION"
+
+        $r = $q.ExecuteReader()
+
+        if($r.Read()){
+            $Login   = [string]$r[0]
+            $Version = [string]$r[1]
+
+            Write-Host "    Login   : $Login"
+            Write-Host "    Version : $Version"
+        }
+
+        $r.Close()
+    }
+    catch {
+
+        Write-Host "[-] Windows auth failed" -ForegroundColor Yellow
+        Write-Host "    $($_.Exception.Message)"
+    }
+    finally {
+
+        if($c.State -ne "Closed"){
+            $c.Close()
+        }
+    }
+
+    # ---------------------------------------------------------
+    # TEST 2 - EMPTY SQL AUTH
+    # ---------------------------------------------------------
+
+    $EmptySQL = "FAILED"
+
+    $cs2 = "Server=$h,1433;Database=master;User ID=;Password=;Integrated Security=False;Connect Timeout=5"
+    $c2 = New-Object System.Data.SqlClient.SqlConnection($cs2)
+
+    try {
+
+        $c2.Open()
+
+        $EmptySQL = "SUCCESS"
+
+        Write-Host "[+] EMPTY SQL AUTH ACCEPTED" -ForegroundColor Red
+
+        $q = $c2.CreateCommand()
+        $q.CommandText = "SELECT SYSTEM_USER"
+
+        $who = $q.ExecuteScalar()
+
+        Write-Host "    SQL identity: $who"
+    }
+    catch {
+
+        Write-Host "[-] Empty SQL auth rejected" -ForegroundColor Green
+        Write-Host "    $($_.Exception.Message)"
+    }
+    finally {
+
+        if($c2.State -ne "Closed"){
+            $c2.Close()
+        }
+    }
+
+    $Results += [PSCustomObject]@{
+        IP             = $h
+        Port           = 1433
+        WindowsAuth    = $Integrated
+        SQLIdentity    = $Login
+        EmptySQLAuth   = $EmptySQL
+    }
+
+    Write-Host ""
+}
+
+Write-Host "`n==========================================" -ForegroundColor Cyan
+Write-Host " SUMMARY"
+Write-Host "==========================================" -ForegroundColor Cyan
+
+$Results | Format-Table -AutoSize
+```
