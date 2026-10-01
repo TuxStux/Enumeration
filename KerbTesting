@@ -230,3 +230,12 @@ Password strength still unknown
 ```
 
 A successful TGS request demonstrates that the account can participate in the Kerberoasting attack path, while actual password recovery depends on the account's password strength and requires a separate offline password audit.
+
+```
+Get-ADUser -Filter 'ServicePrincipalName -like "*"' -Server "10.21.65.229" `
+-Properties ServicePrincipalName,Enabled,PasswordLastSet,PasswordNeverExpires |
+Where-Object {$_.Enabled} |
+Select SamAccountName,PasswordLastSet,PasswordNeverExpires,
+@{N="SPNs";E={$_.ServicePrincipalName -join "; "}} |
+Format-List
+```
