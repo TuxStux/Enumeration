@@ -1,4 +1,9 @@
 ```
+$f=".\PI-EDA_usri-papp-pi005_b_1_dgcache.dat";$b=[IO.File]::ReadAllBytes($f);[Text.Encoding]::ASCII.GetString($b) -split '[^\x20-\x7E]+' | Where-Object {$_.Length -ge 4 -and $_ -match '(?i)pass|pwd|user|account|login|auth|cred|server|host|domain|connection|database|token|key'}
+```
+
+
+```
 $Subnet = "10.21.49"
 
 $Ports = @(21,23,80,135,139,445,1433,3389,5985,5986)
