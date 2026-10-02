@@ -1,1 +1,0 @@
-1..254 | % { $ip="192.168.1.$_"; if(Test-NetConnection $ip -Port 3389 -InformationLevel Quiet -WarningAction SilentlyContinue){ "$ip : 3389 OPEN" } }
