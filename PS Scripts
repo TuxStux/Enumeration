@@ -1,4 +1,10 @@
 ```
+$f=".\PI-EDA_usri-papp-pi005_b_1_dgcache.dat";$b=[IO.File]::ReadAllBytes($f);[Text.Encoding]::ASCII.GetString($b) -split '[^\x20-\x7E]+' | Where-Object {$_.Length -ge 4 -and $_ -match '(?i)pass|pwd|user|account|login|auth|cred|server|host|domain|connection|database|token|key'}
+```
+
+
+
+```
 $Roots=@("C:\","D:\");$NameRx='(?i)(pass(word|wd)?|cred(ential)?|secret|token|auth|api.?key|private.?key|connection|string|login|account|vault|backup|config|settings|unattend|web\.config|app\.config|\.env|\.kdbx|\.pfx|\.pem|id_rsa)';$ExtRx='(?i)\.(txt|ini|conf|config|xml|json|yaml|yml|properties|env|log|csv|ps1|bat|cmd|vbs|sql|bak|old|backup|kdbx|pfx|p12|pem|key)$';foreach($Root in $Roots){if(Test-Path $Root){Write-Host "`n=== SEARCHING $Root ===" -ForegroundColor Cyan;Get-ChildItem $Root -Recurse -Force -File -ErrorAction SilentlyContinue | Where-Object {$_.Name -match $NameRx -or $_.Name -match $ExtRx} | Select-Object FullName,Length,LastWriteTime | Sort-Object FullName | Format-Table -AutoSize}}
 ```
 
